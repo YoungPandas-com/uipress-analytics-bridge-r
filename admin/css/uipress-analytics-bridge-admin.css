@@ -1,0 +1,223 @@
+/**
+ * All of the CSS for your admin-specific functionality should be
+ * included in this file.
+ */
+
+/* General Styles */
+.uipress-analytics-bridge-header {
+    background-color: #fff;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #0c5cef;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    margin: 20px 0;
+    padding: 15px;
+}
+
+.uipress-analytics-bridge-header-content {
+    margin-bottom: 10px;
+}
+
+.uipress-analytics-bridge-footer {
+    margin-top: 20px;
+    color: #646970;
+    font-size: 0.8em;
+}
+
+/* Fields */
+.uipress-analytics-bridge-field {
+    margin-bottom: 20px;
+}
+
+.uipress-analytics-bridge-auth-status {
+    margin-bottom: 10px;
+}
+
+.uipress-analytics-bridge-auth-actions {
+    margin-bottom: 10px;
+}
+
+.uipress-analytics-bridge-auth-description {
+    margin-top: 10px;
+}
+
+.uipress-analytics-bridge-status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: normal;
+    font-size: 0.8em;
+}
+
+.uipress-analytics-bridge-status-connected {
+    background-color: #e6f7e6;
+    color: #2a7d2a;
+    border: 1px solid #c7e6c7;
+}
+
+.uipress-analytics-bridge-status-disconnected {
+    background-color: #f7e6e6;
+    color: #7d2a2a;
+    border: 1px solid #e6c7c7;
+}
+
+.uipress-analytics-bridge-cache-actions {
+    margin-top: 10px;
+}
+
+.uipress-analytics-bridge-connection-details {
+    max-width: 600px;
+}
+
+.uipress-analytics-bridge-connection-details th {
+    font-weight: normal;
+    width: 200px;
+}
+
+/* Account Selector */
+.uipress-analytics-bridge-step {
+    margin-bottom: 20px;
+    padding: 20px;
+    background-color: #fff;
+    border: 1px solid #c3c4c7;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.uipress-analytics-bridge-step h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.uipress-analytics-bridge-accounts-list,
+.uipress-analytics-bridge-properties-list,
+.uipress-analytics-bridge-views-list {
+    margin: 20px 0;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #dcdcde;
+    background: #fbfbfc;
+}
+
+.uipress-analytics-bridge-loading {
+    padding: 20px;
+    text-align: center;
+    color: #646970;
+}
+
+.uipress-analytics-bridge-loading .spinner {
+    float: none;
+    margin: 0 5px 0 0;
+}
+
+.uipress-analytics-bridge-error {
+    color: #b32d2e;
+    background-color: #f7e6e6;
+    border: 1px solid #e6c7c7;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+.uipress-analytics-bridge-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.uipress-analytics-bridge-item {
+    padding: 10px 15px;
+    border-bottom: 1px solid #dcdcde;
+    cursor: pointer;
+}
+
+.uipress-analytics-bridge-item:last-child {
+    border-bottom: none;
+}
+
+.uipress-analytics-bridge-item:hover {
+    background-color: #f0f0f1;
+}
+
+.uipress-analytics-bridge-item.selected {
+    background-color: #f0f7ff;
+    border-left: 4px solid #0c5cef;
+}
+
+.uipress-analytics-bridge-item-name {
+    font-weight: 500;
+}
+
+.uipress-analytics-bridge-item-details {
+    font-size: 0.8em;
+    color: #646970;
+    margin-top: 5px;
+}
+
+/* Modal */
+.uipress-analytics-bridge-modal {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100000;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.uipress-analytics-bridge-modal-content {
+    background-color: #fff;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.uipress-analytics-bridge-modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #dcdcde;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.uipress-analytics-bridge-modal-title {
+    margin: 0;
+    font-size: 1.3em;
+}
+
+.uipress-analytics-bridge-modal-close {
+    cursor: pointer;
+    color: #646970;
+    font-size: 1.5em;
+    line-height: 1;
+}
+
+.uipress-analytics-bridge-modal-body {
+    padding: 20px;
+}
+
+.uipress-analytics-bridge-modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #dcdcde;
+    text-align: right;
+}
+
+/* Responsive */
+@media screen and (max-width: 782px) {
+    .uipress-analytics-bridge-actions {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .uipress-analytics-bridge-actions button:not(:last-child) {
+        margin-bottom: 10px;
+    }
+    
+    .uipress-analytics-bridge-connection-details th {
+        width: 100px;
+    }
+}
