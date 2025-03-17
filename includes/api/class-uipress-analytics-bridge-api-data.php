@@ -411,77 +411,98 @@ class UIPress_Analytics_Bridge_API_Data {
             return new WP_Error('missing_token', __('Access token is required', 'uipress-analytics-bridge'));
         }
         
-        // Use the Google Analytics Admin API to get properties
-        $url = 'https://analyticsadmin.googleapis.com/v1beta/properties';
+        // First, get the accounts the user has access to
+        $accounts_url = 'https://analyticsadmin.googleapis.com/v1beta/accounts';
         
-        $response = wp_remote_get($url, array(
+        $accounts_response = wp_remote_get($accounts_url, array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $access_token,
             ),
             'timeout' => 15,
         ));
         
-        if (is_wp_error($response)) {
-            return $response;
+        if (is_wp_error($accounts_response)) {
+            return $accounts_response;
         }
         
-        $response_code = wp_remote_retrieve_response_code($response);
-        if ($response_code !== 200) {
-            $error_body = wp_remote_retrieve_body($response);
-            $error_data = json_decode($error_body, true);
-            $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : sprintf(__('API returned status code: %d', 'uipress-analytics-bridge'), $response_code);
-            
-            uipress_analytics_bridge_debug('API Error in get_analytics_properties', array(
-                'code' => $response_code,
-                'response' => $error_body
-            ));
-            
+        $accounts_code = wp_remote_retrieve_response_code($accounts_response);
+        $accounts_body = wp_remote_retrieve_body($accounts_response);
+        $accounts_data = json_decode($accounts_body, true);
+        
+        // Log the response for debugging
+        uipress_analytics_bridge_debug('GA Accounts API Response', array(
+            'code' => $accounts_code,
+            'response' => $accounts_data
+        ));
+        
+        if ($accounts_code !== 200 || empty($accounts_data['accounts'])) {
+            $error_message = isset($accounts_data['error']['message']) 
+                ? $accounts_data['error']['message'] 
+                : sprintf(__('Failed to retrieve accounts. API returned status code: %d', 'uipress-analytics-bridge'), $accounts_code);
+                
             return new WP_Error('api_error', $error_message);
         }
         
-        $data = json_decode(wp_remote_retrieve_body($response), true);
+        // Collect all properties from all accounts
+        $all_properties = array();
         
-        // For debugging
-        uipress_analytics_bridge_debug('Properties API Response', $data);
-        
-        // GA4 response structure
-        if (empty($data) || !isset($data['properties'])) {
-            return array(); // Return empty array instead of error for no properties
-        }
-        
-        $properties = array();
-        
-        foreach ($data['properties'] as $property) {
-            // Extract property ID from name (format: "properties/123456789")
-            $property_id = isset($property['name']) ? str_replace('properties/', '', $property['name']) : '';
+        foreach ($accounts_data['accounts'] as $account) {
+            // Extract account ID (format: "accounts/123456789")
+            $account_id = str_replace('accounts/', '', $account['name']);
+            $account_name = isset($account['displayName']) ? $account['displayName'] : 'Analytics Account';
             
-            // Get account ID from parent if available (format: "accounts/123456789")
-            $account_id = '';
-            $account_name = '';
-            if (isset($property['parent'])) {
-                $account_id = str_replace('accounts/', '', $property['parent']);
-                // We don't have account name in this response, we'll use property name as fallback
-                $account_name = isset($property['displayName']) ? $property['displayName'] . ' Account' : '';
+            // Get properties for this account - need to use filter parameter
+            $properties_url = "https://analyticsadmin.googleapis.com/v1beta/properties?filter=parent:accounts/{$account_id}";
+            
+            $properties_response = wp_remote_get($properties_url, array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $access_token,
+                ),
+                'timeout' => 15,
+            ));
+            
+            if (is_wp_error($properties_response)) {
+                continue; // Skip this account on error
             }
             
-            // For GA4, we need to check dataStreams for measurement ID
-            $measurement_id = isset($property['measurementId']) ? $property['measurementId'] : '';
+            $properties_code = wp_remote_retrieve_response_code($properties_response);
+            $properties_body = wp_remote_retrieve_body($properties_response);
+            $properties_data = json_decode($properties_body, true);
             
-            // If no measurement ID in property, try to use property ID with G- prefix
-            if (empty($measurement_id)) {
-                $measurement_id = 'G-' . $property_id;
+            // Log the response for debugging
+            uipress_analytics_bridge_debug('GA Properties API Response for account ' . $account_id, array(
+                'code' => $properties_code,
+                'response' => $properties_data
+            ));
+            
+            if ($properties_code !== 200 || !isset($properties_data['properties'])) {
+                continue; // Skip this account if we can't get properties
             }
             
-            $properties[] = array(
-                'property_id' => $property_id,
-                'property_name' => isset($property['displayName']) ? $property['displayName'] : '',
-                'account_id' => $account_id,
-                'account_name' => $account_name,
-                'measurement_id' => $measurement_id,
-            );
+            // Add properties to our results
+            foreach ($properties_data['properties'] as $property) {
+                // Extract property ID from name (format: "properties/123456789")
+                $property_id = isset($property['name']) ? str_replace('properties/', '', $property['name']) : '';
+                
+                // For GA4, we need to check dataStreams for measurement ID
+                $measurement_id = isset($property['measurementId']) ? $property['measurementId'] : '';
+                
+                // If no measurement ID in property, try to use property ID with G- prefix
+                if (empty($measurement_id)) {
+                    $measurement_id = 'G-' . $property_id;
+                }
+                
+                $all_properties[] = array(
+                    'property_id' => $property_id,
+                    'property_name' => isset($property['displayName']) ? $property['displayName'] : 'GA Property',
+                    'account_id' => $account_id,
+                    'account_name' => $account_name,
+                    'measurement_id' => $measurement_id,
+                );
+            }
         }
         
-        return $properties;
+        return $all_properties;
     }
 
     /**

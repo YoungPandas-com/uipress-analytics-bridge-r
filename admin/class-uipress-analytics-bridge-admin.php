@@ -148,6 +148,12 @@ class UIPress_Analytics_Bridge_Admin {
             true
         );
         
+        // Settings page URL for redirects
+        $settings_url = admin_url('options-general.php?page=uipress-analytics-bridge');
+        if (is_network_admin()) {
+            $settings_url = network_admin_url('settings.php?page=uipress-analytics-bridge');
+        }
+        
         // Localize script
         wp_localize_script(
             'uipress-analytics-bridge-admin',
@@ -157,6 +163,7 @@ class UIPress_Analytics_Bridge_Admin {
                 'nonce' => wp_create_nonce('uipress-analytics-bridge-nonce'),
                 'isNetwork' => is_network_admin() ? 'network' : 'site',
                 'isAuthenticated' => $this->is_authenticated(),
+                'settingsUrl' => $settings_url,
                 'strings' => array(
                     'authenticate' => __('Authenticate with Google Analytics', 'uipress-analytics-bridge'),
                     'reauthenticate' => __('Re-authenticate with Google Analytics', 'uipress-analytics-bridge'),

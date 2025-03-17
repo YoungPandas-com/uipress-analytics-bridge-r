@@ -7,13 +7,64 @@
     'use strict';
 
     /**
+     * UI Helper Functions - Define this first so it's available to other modules
+     */
+    var UIPressAnalyticsBridgeUI = {
+        showLoader: function() {
+            if ($('#uipress-analytics-bridge-loader').length === 0) {
+                $('body').append('<div id="uipress-analytics-bridge-loader" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 99999; display: flex; align-items: center; justify-content: center;"><div style="background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);"><span class="spinner is-active" style="float: none; margin: 0 10px 0 0;"></span>Loading...</div></div>');
+            } else {
+                $('#uipress-analytics-bridge-loader').show();
+            }
+        },
+
+        hideLoader: function() {
+            $('#uipress-analytics-bridge-loader').hide();
+        },
+
+        showError: function(title, message) {
+            this.showNotice(title, message, 'error');
+        },
+
+        showSuccess: function(title, message) {
+            this.showNotice(title, message, 'success');
+        },
+
+        showNotice: function(title, message, type) {
+            // Remove any existing notices
+            $('.uipress-analytics-bridge-notice').remove();
+            
+            // Create notice
+            var $notice = $('<div class="notice notice-' + type + ' is-dismissible uipress-analytics-bridge-notice"><p><strong>' + title + ':</strong> ' + message + '</p><button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button></div>');
+            
+            // Insert notice
+            $('.wrap h1').after($notice);
+            
+            // Initialize dismiss button
+            $notice.find('.notice-dismiss').on('click', function() {
+                $notice.fadeOut(300, function() {
+                    $notice.remove();
+                });
+            });
+            
+            // Auto-dismiss after 5 seconds for success notices
+            if (type === 'success') {
+                setTimeout(function() {
+                    $notice.fadeOut(300, function() {
+                        $notice.remove();
+                    });
+                }, 5000);
+            }
+        }
+    };
+
+    /**
      * Auth Handler
      */
     var UIPressAnalyticsBridgeAuth = {
         init: function() {
             // Initialize auth actions
             this.initAuthButtons();
-            // Removed the initAccountSelector call
         },
 
         initAuthButtons: function() {
@@ -36,7 +87,10 @@
                 // Save settings first to ensure credentials are stored
                 $('#uipress-analytics-bridge-settings-form').submit();
                 
-                UIPressAnalyticsBridgeAuth.authenticate();
+                // Add a small delay to ensure the settings are saved
+                setTimeout(function() {
+                    UIPressAnalyticsBridgeAuth.authenticate();
+                }, 500);
             });
 
             // Re-authentication button
@@ -64,6 +118,8 @@
         authenticate: function() {
             UIPressAnalyticsBridgeUI.showLoader();
             
+            console.log('Sending AJAX request to get auth URL');
+            
             $.ajax({
                 url: uipressAnalyticsBridgeAdmin.ajaxurl,
                 type: 'POST',
@@ -74,6 +130,7 @@
                     auth_type: 'auth'
                 },
                 success: function(response) {
+                    console.log('AJAX response:', response);
                     UIPressAnalyticsBridgeUI.hideLoader();
                     
                     if (response.success && response.data.redirect) {
@@ -85,26 +142,8 @@
                             return;
                         }
                         
-                        // Open popup window for authentication with increased dimensions
-                        var authWindow = window.open(response.data.redirect, 'uipressAnalyticsBridgeAuth', 'width=800,height=800');
-                        
-                        // Check if window was opened
-                        if (authWindow) {
-                            // Poll for window closure
-                            var pollTimer = setInterval(function() {
-                                if (authWindow.closed) {
-                                    clearInterval(pollTimer);
-                                    
-                                    // Refresh the page to show updated auth status
-                                    location.reload();
-                                }
-                            }, 500);
-                        } else {
-                            UIPressAnalyticsBridgeUI.showError(
-                                uipressAnalyticsBridgeAdmin.strings.error, 
-                                'Popup window was blocked. Please allow popups for this site and try again.'
-                            );
-                        }
+                        // Navigate directly instead of using a popup window
+                        window.location.href = response.data.redirect;
                     } else {
                         UIPressAnalyticsBridgeUI.showError(
                             uipressAnalyticsBridgeAdmin.strings.error, 
@@ -113,6 +152,7 @@
                     }
                 },
                 error: function(xhr, status, error) {
+                    console.log('AJAX error:', xhr, status, error);
                     UIPressAnalyticsBridgeUI.hideLoader();
                     UIPressAnalyticsBridgeUI.showError(
                         uipressAnalyticsBridgeAdmin.strings.error, 
@@ -138,30 +178,21 @@
                     UIPressAnalyticsBridgeUI.hideLoader();
                     
                     if (response.success && response.data.redirect) {
-                        // Open popup window for re-authentication
-                        var authWindow = window.open(response.data.redirect, 'uipressAnalyticsBridgeAuth', 'width=600,height=700');
-                        
-                        // Check if window was opened
-                        if (authWindow) {
-                            // Poll for window closure
-                            var pollTimer = setInterval(function() {
-                                if (authWindow.closed) {
-                                    clearInterval(pollTimer);
-                                    
-                                    // Refresh the page to show updated auth status
-                                    location.reload();
-                                }
-                            }, 500);
-                        } else {
-                            UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'Popup window was blocked. Please allow popups for this site and try again.');
-                        }
+                        // Navigate directly to the auth URL
+                        window.location.href = response.data.redirect;
                     } else {
-                        UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, response.data.message || 'Failed to get re-authentication URL.');
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            response.data.message || 'Failed to get re-authentication URL.'
+                        );
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
                     UIPressAnalyticsBridgeUI.hideLoader();
-                    UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'AJAX request failed.');
+                    UIPressAnalyticsBridgeUI.showError(
+                        uipressAnalyticsBridgeAdmin.strings.error, 
+                        'AJAX request failed: ' + (error || status)
+                    );
                 }
             });
         },
@@ -184,14 +215,23 @@
                     $button.text(originalText).prop('disabled', false);
                     
                     if (response.success) {
-                        UIPressAnalyticsBridgeUI.showSuccess(uipressAnalyticsBridgeAdmin.strings.success, response.data.message || 'Authentication verified successfully.');
+                        UIPressAnalyticsBridgeUI.showSuccess(
+                            uipressAnalyticsBridgeAdmin.strings.success, 
+                            response.data.message || 'Authentication verified successfully.'
+                        );
                     } else {
-                        UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, response.data.message || 'Failed to verify authentication.');
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            response.data.message || 'Failed to verify authentication.'
+                        );
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
                     $button.text(originalText).prop('disabled', false);
-                    UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'AJAX request failed.');
+                    UIPressAnalyticsBridgeUI.showError(
+                        uipressAnalyticsBridgeAdmin.strings.error, 
+                        'AJAX request failed: ' + (error || status)
+                    );
                 }
             });
         },
@@ -219,19 +259,20 @@
                         
                         window.location.href = redirectUrl + '?page=uipress-analytics-bridge&deauth=success';
                     } else {
-                        UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, response.data.message || 'Failed to deauthenticate.');
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            response.data.message || 'Failed to deauthenticate.'
+                        );
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
                     UIPressAnalyticsBridgeUI.hideLoader();
-                    UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'AJAX request failed.');
+                    UIPressAnalyticsBridgeUI.showError(
+                        uipressAnalyticsBridgeAdmin.strings.error, 
+                        'AJAX request failed: ' + (error || status)
+                    );
                 }
             });
-        },
-
-        initAccountSelector: function() {
-            // Account selector functionality would go here
-            // This will be implemented in a future version
         }
     };
 
@@ -347,11 +388,11 @@
                         );
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
                     UIPressAnalyticsBridgeUI.hideLoader();
                     UIPressAnalyticsBridgeUI.showError(
                         uipressAnalyticsBridgeAdmin.strings.error, 
-                        'AJAX request failed.'
+                        'AJAX request failed: ' + (error || status)
                     );
                 }
             });
@@ -372,9 +413,13 @@
             $('#uipress-analytics-bridge-settings-form').on('submit', function(e) {
                 e.preventDefault();
                 
+                var googleClientId = $('#uipress_analytics_bridge_client_id').val();
+                var googleClientSecret = $('#uipress_analytics_bridge_client_secret').val();
                 var settings = {
                     debug_mode: $('#uipress_analytics_bridge_debug_mode').is(':checked'),
-                    cache_duration: $('#uipress_analytics_bridge_cache_duration').val()
+                    cache_duration: $('#uipress_analytics_bridge_cache_duration').val(),
+                    google_client_id: googleClientId,
+                    google_client_secret: googleClientSecret
                 };
                 
                 UIPressAnalyticsBridgeUI.showLoader();
@@ -392,14 +437,23 @@
                         UIPressAnalyticsBridgeUI.hideLoader();
                         
                         if (response.success) {
-                            UIPressAnalyticsBridgeUI.showSuccess(uipressAnalyticsBridgeAdmin.strings.success, response.data.message || 'Settings saved successfully.');
+                            UIPressAnalyticsBridgeUI.showSuccess(
+                                uipressAnalyticsBridgeAdmin.strings.success, 
+                                response.data.message || 'Settings saved successfully.'
+                            );
                         } else {
-                            UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, response.data.message || 'Failed to save settings.');
+                            UIPressAnalyticsBridgeUI.showError(
+                                uipressAnalyticsBridgeAdmin.strings.error, 
+                                response.data.message || 'Failed to save settings.'
+                            );
                         }
                     },
-                    error: function() {
+                    error: function(xhr, status, error) {
                         UIPressAnalyticsBridgeUI.hideLoader();
-                        UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'AJAX request failed.');
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            'AJAX request failed: ' + (error || status)
+                        );
                     }
                 });
             });
@@ -426,69 +480,26 @@
                         $button.text(originalText).prop('disabled', false);
                         
                         if (response.success) {
-                            UIPressAnalyticsBridgeUI.showSuccess(uipressAnalyticsBridgeAdmin.strings.success, response.data.message || 'Cache cleared successfully.');
+                            UIPressAnalyticsBridgeUI.showSuccess(
+                                uipressAnalyticsBridgeAdmin.strings.success, 
+                                response.data.message || 'Cache cleared successfully.'
+                            );
                         } else {
-                            UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, response.data.message || 'Failed to clear cache.');
+                            UIPressAnalyticsBridgeUI.showError(
+                                uipressAnalyticsBridgeAdmin.strings.error, 
+                                response.data.message || 'Failed to clear cache.'
+                            );
                         }
                     },
-                    error: function() {
+                    error: function(xhr, status, error) {
                         $button.text(originalText).prop('disabled', false);
-                        UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'AJAX request failed.');
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            'AJAX request failed: ' + (error || status)
+                        );
                     }
                 });
             });
-        }
-    };
-
-    /**
-     * UI Helper Functions
-     */
-    var UIPressAnalyticsBridgeUI = {
-        showLoader: function() {
-            if ($('#uipress-analytics-bridge-loader').length === 0) {
-                $('body').append('<div id="uipress-analytics-bridge-loader" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 99999; display: flex; align-items: center; justify-content: center;"><div style="background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);"><span class="spinner is-active" style="float: none; margin: 0 10px 0 0;"></span>Loading...</div></div>');
-            } else {
-                $('#uipress-analytics-bridge-loader').show();
-            }
-        },
-
-        hideLoader: function() {
-            $('#uipress-analytics-bridge-loader').hide();
-        },
-
-        showError: function(title, message) {
-            this.showNotice(title, message, 'error');
-        },
-
-        showSuccess: function(title, message) {
-            this.showNotice(title, message, 'success');
-        },
-
-        showNotice: function(title, message, type) {
-            // Remove any existing notices
-            $('.uipress-analytics-bridge-notice').remove();
-            
-            // Create notice
-            var $notice = $('<div class="notice notice-' + type + ' is-dismissible uipress-analytics-bridge-notice"><p><strong>' + title + ':</strong> ' + message + '</p><button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button></div>');
-            
-            // Insert notice
-            $('.wrap h1').after($notice);
-            
-            // Initialize dismiss button
-            $notice.find('.notice-dismiss').on('click', function() {
-                $notice.fadeOut(300, function() {
-                    $notice.remove();
-                });
-            });
-            
-            // Auto-dismiss after 5 seconds for success notices
-            if (type === 'success') {
-                setTimeout(function() {
-                    $notice.fadeOut(300, function() {
-                        $notice.remove();
-                    });
-                }, 5000);
-            }
         }
     };
 
@@ -498,6 +509,41 @@
     $(document).ready(function() {
         UIPressAnalyticsBridgeAuth.init();
         UIPressAnalyticsBridgeSettings.init();
+
+        // Init property selection for properties page
+        $('.uipress-analytics-bridge-select-property').on('click', function() {
+            var propertyId = $(this).data('property-id');
+            var measurementId = $(this).data('measurement-id');
+            var accountId = $(this).data('account-id');
+            
+            UIPressAnalyticsBridgeUI.showLoader();
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'uipress_analytics_bridge_select_property',
+                    nonce: uipressAnalyticsBridgeAdmin.nonce,
+                    network: uipressAnalyticsBridgeAdmin.isNetwork,
+                    property_id: propertyId,
+                    measurement_id: measurementId,
+                    account_id: accountId
+                },
+                success: function(response) {
+                    UIPressAnalyticsBridgeUI.hideLoader();
+                    
+                    if (response.success) {
+                        window.location.href = uipressAnalyticsBridgeAdmin.settingsUrl + '&auth=success';
+                    } else {
+                        alert(response.data.message || 'Failed to select property.');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    UIPressAnalyticsBridgeUI.hideLoader();
+                    alert('AJAX request failed: ' + (error || status));
+                }
+            });
+        });
     });
 
 })(jQuery);

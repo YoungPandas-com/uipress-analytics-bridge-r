@@ -89,7 +89,7 @@ class UIPress_Analytics_Bridge_API_Auth {
             return;
         }
         
-        uipress_analytics_bridge_debug('Auth callback initiated');
+        uipress_analytics_bridge_debug('Auth callback initiated', $_GET);
         
         if (!current_user_can('manage_options')) {
             wp_die(__('You do not have permission to perform this action.', 'uipress-analytics-bridge'));
@@ -133,7 +133,9 @@ class UIPress_Analytics_Bridge_API_Auth {
         
         uipress_analytics_bridge_debug('Exchanging code for token', array(
             'code_exists' => !empty($_GET['code']),
-            'callback_url' => $callback_url
+            'callback_url' => $callback_url,
+            'client_id_exists' => !empty($client_id),
+            'client_secret_exists' => !empty($client_secret)
         ));
         
         // Exchange code for token
@@ -160,6 +162,7 @@ class UIPress_Analytics_Bridge_API_Auth {
         uipress_analytics_bridge_debug('Token exchange response', array(
             'status' => $response_code,
             'success' => isset($token_data['access_token']),
+            'response' => $token_data
         ));
         
         if ($response_code !== 200 || empty($token_data) || !isset($token_data['access_token'])) {
@@ -171,14 +174,15 @@ class UIPress_Analytics_Bridge_API_Auth {
             wp_die($error_message);
         }
         
-        // Store the authentication data
+        // Store the authentication data with full token details
         $profile = array(
             'key' => $client_id,
             'token' => $token_data['access_token'],
+            'token_type' => isset($token_data['token_type']) ? $token_data['token_type'] : 'Bearer',
             'refresh_token' => isset($token_data['refresh_token']) ? $token_data['refresh_token'] : '',
             'expires_in' => isset($token_data['expires_in']) ? $token_data['expires_in'] : 3600,
             'token_created' => time(),
-            'token_type' => isset($token_data['token_type']) ? $token_data['token_type'] : 'Bearer',
+            'siteurl' => home_url(),
         );
         
         uipress_analytics_bridge_debug('Authentication successful', array(
