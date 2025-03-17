@@ -84,7 +84,7 @@ final class UIPress_Analytics_Bridge {
      * API handler
      *
      * @since 1.0.0
-     * @var UIPress_Analytics_Bridge_API
+     * @var UIPress_Analytics_Bridge_API_Auth
      */
     public $api;
 
@@ -103,6 +103,9 @@ final class UIPress_Analytics_Bridge {
             self::$instance->setup_constants();
             self::$instance->includes();
             self::$instance->init_hooks();
+            
+            // Register AJAX handlers early, before 'init' action
+            self::$instance->register_ajax_handlers();
         }
         return self::$instance;
     }
@@ -165,6 +168,53 @@ final class UIPress_Analytics_Bridge {
         
         // Load text domain
         add_action('init', array($this, 'load_textdomain'), 10);
+    }
+    
+    /**
+     * Register AJAX handlers early, before WordPress initialization
+     *
+     * @since 1.0.0
+     * @access private
+     * @return void
+     */
+    private function register_ajax_handlers() {
+        // Auth AJAX handlers
+        add_action('wp_ajax_uipress_analytics_bridge_get_auth_url', array($this, 'ajax_get_auth_url'));
+        add_action('wp_ajax_uipress_analytics_bridge_select_property', array($this, 'ajax_select_property'));
+    }
+
+    /**
+     * AJAX handler for getting auth URL
+     *
+     * @since 1.0.0
+     * @access public
+     * @return void
+     */
+    public function ajax_get_auth_url() {
+        // Initialize API auth if not already initialized
+        if (!isset($this->api) || !($this->api instanceof UIPress_Analytics_Bridge_API_Auth)) {
+            $this->api = new UIPress_Analytics_Bridge_API_Auth();
+        }
+        
+        // Call the API auth method directly
+        $this->api->get_auth_url();
+    }
+
+    /**
+     * AJAX handler for selecting property
+     *
+     * @since 1.0.0
+     * @access public
+     * @return void
+     */
+    public function ajax_select_property() {
+        // Initialize auth if not already initialized
+        if (!isset($this->auth) || !($this->auth instanceof UIPress_Analytics_Bridge_Auth)) {
+            $this->auth = new UIPress_Analytics_Bridge_Auth();
+        }
+        
+        // Call the auth method directly
+        $this->auth->handle_property_selection();
     }
 
     /**

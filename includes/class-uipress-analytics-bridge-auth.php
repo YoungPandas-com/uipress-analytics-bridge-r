@@ -725,6 +725,7 @@ class UIPress_Analytics_Bridge_Auth {
             wp_send_json_error(array(
                 'message' => __('You do not have permission to perform this action.', 'uipress-analytics-bridge')
             ));
+            return;
         }
         
         // Get data
@@ -733,10 +734,19 @@ class UIPress_Analytics_Bridge_Auth {
         $account_id = isset($_POST['account_id']) ? sanitize_text_field($_POST['account_id']) : '';
         $is_network = isset($_POST['network']) && $_POST['network'] === 'network';
         
+        // Log the received data
+        uipress_analytics_bridge_debug('Property selection data received', array(
+            'property_id' => $property_id,
+            'measurement_id' => $measurement_id,
+            'account_id' => $account_id,
+            'is_network' => $is_network
+        ));
+        
         if (empty($property_id) || empty($measurement_id) || empty($account_id)) {
             wp_send_json_error(array(
                 'message' => __('Missing required property information.', 'uipress-analytics-bridge')
             ));
+            return;
         }
         
         // Get current profile
@@ -746,6 +756,7 @@ class UIPress_Analytics_Bridge_Auth {
             wp_send_json_error(array(
                 'message' => __('No authentication profile found.', 'uipress-analytics-bridge')
             ));
+            return;
         }
         
         // Update profile with selected property
@@ -753,9 +764,23 @@ class UIPress_Analytics_Bridge_Auth {
         $profile['p'] = $property_id; // In GA4, we use property ID as view ID
         $profile['v4'] = $measurement_id;
         $profile['a'] = $account_id;
+        $profile['viewname'] = $measurement_id; // Use measurement ID as view name for display
+        
+        // Log the profile we're about to save
+        uipress_analytics_bridge_debug('Updating profile with selected property', $profile);
         
         // Save profile
         $this->set_analytics_profile($profile, $is_network);
+        
+        // Also update UIPress Pro settings directly to ensure compatibility
+        update_option('uip_google_analytics', array(
+            'view' => $profile['viewname'],
+            'code' => $profile['v4'],
+            'token' => $profile['token'],
+        ));
+        update_option('uip_google_analytics_status', 'connected');
+        
+        uipress_analytics_bridge_debug('Property selection successful');
         
         wp_send_json_success(array(
             'message' => __('Property selected successfully.', 'uipress-analytics-bridge')

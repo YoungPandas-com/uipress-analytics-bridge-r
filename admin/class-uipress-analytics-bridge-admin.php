@@ -552,6 +552,21 @@ class UIPress_Analytics_Bridge_Admin {
             return;
         }
         
+        // Settings page URL for redirects
+        $settings_url = admin_url('options-general.php?page=uipress-analytics-bridge');
+        if (is_network_admin()) {
+            $settings_url = network_admin_url('settings.php?page=uipress-analytics-bridge');
+        }
+        
+        // Enqueue property selection script
+        wp_enqueue_script(
+            'uipress-analytics-bridge-property-selection',
+            UIPRESS_ANALYTICS_BRIDGE_URL . 'admin/js/uipress-analytics-bridge-property-selection.js',
+            array('jquery'),
+            UIPRESS_ANALYTICS_BRIDGE_VERSION,
+            true
+        );
+        
         ?>
         <div class="wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
@@ -562,8 +577,18 @@ class UIPress_Analytics_Bridge_Admin {
                 </div>
             </div>
             
+            <!-- Add nonce field for AJAX security -->
+            <input type="hidden" id="uipress_analytics_bridge_nonce" value="<?php echo wp_create_nonce('uipress-analytics-bridge-nonce'); ?>">
+            <input type="hidden" id="redirect_url" value="<?php echo esc_url($settings_url); ?>">
+            
             <div class="uipress-analytics-bridge-properties-container">
                 <h2><?php _e('Available Properties', 'uipress-analytics-bridge'); ?></h2>
+                
+                <?php if (empty($properties)): ?>
+                    <div class="notice notice-warning">
+                        <p><?php _e('No Google Analytics properties found for your account. Please make sure you have created a property in your Google Analytics account.', 'uipress-analytics-bridge'); ?></p>
+                    </div>
+                <?php else: ?>
                 
                 <div class="uipress-analytics-bridge-properties">
                     <?php foreach ($properties as $property) : ?>
@@ -580,52 +605,15 @@ class UIPress_Analytics_Bridge_Admin {
                     </div>
                     <?php endforeach; ?>
                 </div>
+                <?php endif; ?>
             </div>
             
             <div class="uipress-analytics-bridge-footer">
                 <p>
-                    <a href="<?php echo esc_url(admin_url('options-general.php?page=uipress-analytics-bridge')); ?>" class="button"><?php _e('Back to Settings', 'uipress-analytics-bridge'); ?></a>
+                    <a href="<?php echo esc_url($settings_url); ?>" class="button"><?php _e('Back to Settings', 'uipress-analytics-bridge'); ?></a>
                 </p>
             </div>
         </div>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            $('.uipress-analytics-bridge-select-property').on('click', function() {
-                var propertyId = $(this).data('property-id');
-                var measurementId = $(this).data('measurement-id');
-                var accountId = $(this).data('account-id');
-                
-                UIPressAnalyticsBridgeUI.showLoader();
-                
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'uipress_analytics_bridge_select_property',
-                        nonce: '<?php echo wp_create_nonce('uipress-analytics-bridge-nonce'); ?>',
-                        network: '<?php echo $is_network ? 'network' : 'site'; ?>',
-                        property_id: propertyId,
-                        measurement_id: measurementId,
-                        account_id: accountId
-                    },
-                    success: function(response) {
-                        UIPressAnalyticsBridgeUI.hideLoader();
-                        
-                        if (response.success) {
-                            window.location.href = '<?php echo admin_url('options-general.php?page=uipress-analytics-bridge&auth=success'); ?>';
-                        } else {
-                            alert(response.data.message || 'Failed to select property.');
-                        }
-                    },
-                    error: function() {
-                        UIPressAnalyticsBridgeUI.hideLoader();
-                        alert('AJAX request failed.');
-                    }
-                });
-            });
-        });
-        </script>
         <?php
     }
 

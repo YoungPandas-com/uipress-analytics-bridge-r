@@ -7,9 +7,9 @@
     'use strict';
 
     /**
-     * UI Helper Functions - Define this first so it's available to other modules
+     * UI Helper Functions
      */
-    var UIPressAnalyticsBridgeUI = {
+    window.UIPressAnalyticsBridgeUI = {
         showLoader: function() {
             if ($('#uipress-analytics-bridge-loader').length === 0) {
                 $('body').append('<div id="uipress-analytics-bridge-loader" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 99999; display: flex; align-items: center; justify-content: center;"><div style="background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);"><span class="spinner is-active" style="float: none; margin: 0 10px 0 0;"></span>Loading...</div></div>');
@@ -61,20 +61,27 @@
     /**
      * Auth Handler
      */
-    var UIPressAnalyticsBridgeAuth = {
+    window.UIPressAnalyticsBridgeAuth = {
         init: function() {
+            console.log('Initializing auth handler');
             // Initialize auth actions
             this.initAuthButtons();
         },
 
         initAuthButtons: function() {
+            console.log('Setting up auth button handlers');
+            
             // Authentication button
-            $('.uipress-analytics-bridge-auth').on('click', function(e) {
+            $(document).on('click', '.uipress-analytics-bridge-auth', function(e) {
                 e.preventDefault();
+                console.log('Auth button clicked');
                 
                 // Check if credentials are entered
                 var clientId = $('#uipress_analytics_bridge_client_id').val();
                 var clientSecret = $('#uipress_analytics_bridge_client_secret').val();
+                
+                console.log('Client ID:', clientId ? 'Provided' : 'Missing');
+                console.log('Client Secret:', clientSecret ? 'Provided' : 'Missing');
                 
                 if (!clientId || !clientSecret) {
                     UIPressAnalyticsBridgeUI.showError(
@@ -94,20 +101,23 @@
             });
 
             // Re-authentication button
-            $('.uipress-analytics-bridge-reauth').on('click', function(e) {
+            $(document).on('click', '.uipress-analytics-bridge-reauth', function(e) {
                 e.preventDefault();
+                console.log('Reauth button clicked');
                 UIPressAnalyticsBridgeAuth.reauthenticate();
             });
 
             // Verify button
-            $('.uipress-analytics-bridge-verify-auth').on('click', function(e) {
+            $(document).on('click', '.uipress-analytics-bridge-verify-auth', function(e) {
                 e.preventDefault();
+                console.log('Verify button clicked');
                 UIPressAnalyticsBridgeAuth.verify();
             });
 
             // Deauthentication button
-            $('.uipress-analytics-bridge-deauth').on('click', function(e) {
+            $(document).on('click', '.uipress-analytics-bridge-deauth', function(e) {
                 e.preventDefault();
+                console.log('Deauth button clicked');
                 
                 if (confirm(uipressAnalyticsBridgeAdmin.strings.confirmDeauth)) {
                     UIPressAnalyticsBridgeAuth.deauthenticate();
@@ -116,6 +126,7 @@
         },
 
         authenticate: function() {
+            console.log('Starting authentication process');
             UIPressAnalyticsBridgeUI.showLoader();
             
             console.log('Sending AJAX request to get auth URL');
@@ -142,6 +153,7 @@
                             return;
                         }
                         
+                        console.log('Redirecting to:', response.data.redirect);
                         // Navigate directly instead of using a popup window
                         window.location.href = response.data.redirect;
                     } else {
@@ -163,6 +175,7 @@
         },
 
         reauthenticate: function() {
+            console.log('Starting reauthentication process');
             UIPressAnalyticsBridgeUI.showLoader();
             
             $.ajax({
@@ -176,6 +189,7 @@
                 },
                 success: function(response) {
                     UIPressAnalyticsBridgeUI.hideLoader();
+                    console.log('AJAX response for reauth:', response);
                     
                     if (response.success && response.data.redirect) {
                         // Navigate directly to the auth URL
@@ -188,6 +202,7 @@
                     }
                 },
                 error: function(xhr, status, error) {
+                    console.log('AJAX error for reauth:', xhr, status, error);
                     UIPressAnalyticsBridgeUI.hideLoader();
                     UIPressAnalyticsBridgeUI.showError(
                         uipressAnalyticsBridgeAdmin.strings.error, 
@@ -198,6 +213,7 @@
         },
 
         verify: function() {
+            console.log('Starting verification process');
             var $button = $('.uipress-analytics-bridge-verify-auth');
             var originalText = $button.text();
             
@@ -212,6 +228,7 @@
                     network: uipressAnalyticsBridgeAdmin.isNetwork
                 },
                 success: function(response) {
+                    console.log('AJAX response for verify:', response);
                     $button.text(originalText).prop('disabled', false);
                     
                     if (response.success) {
@@ -227,6 +244,7 @@
                     }
                 },
                 error: function(xhr, status, error) {
+                    console.log('AJAX error for verify:', xhr, status, error);
                     $button.text(originalText).prop('disabled', false);
                     UIPressAnalyticsBridgeUI.showError(
                         uipressAnalyticsBridgeAdmin.strings.error, 
@@ -237,6 +255,7 @@
         },
 
         deauthenticate: function() {
+            console.log('Starting deauthentication process');
             UIPressAnalyticsBridgeUI.showLoader();
             
             $.ajax({
@@ -248,6 +267,7 @@
                     network: uipressAnalyticsBridgeAdmin.isNetwork
                 },
                 success: function(response) {
+                    console.log('AJAX response for deauth:', response);
                     UIPressAnalyticsBridgeUI.hideLoader();
                     
                     if (response.success) {
@@ -266,6 +286,7 @@
                     }
                 },
                 error: function(xhr, status, error) {
+                    console.log('AJAX error for deauth:', xhr, status, error);
                     UIPressAnalyticsBridgeUI.hideLoader();
                     UIPressAnalyticsBridgeUI.showError(
                         uipressAnalyticsBridgeAdmin.strings.error, 
@@ -279,7 +300,7 @@
     /**
      * Property Selection Handler
      */
-    var UIPressAnalyticsBridgePropertySelector = {
+    window.UIPressAnalyticsBridgePropertySelector = {
         properties: [],
         selectedProperty: null,
         
@@ -402,8 +423,9 @@
     /**
      * Settings Handler
      */
-    var UIPressAnalyticsBridgeSettings = {
+    window.UIPressAnalyticsBridgeSettings = {
         init: function() {
+            console.log('Initializing settings handler');
             // Initialize settings actions
             this.initSettingsForm();
             this.initClearCache();
@@ -412,6 +434,7 @@
         initSettingsForm: function() {
             $('#uipress-analytics-bridge-settings-form').on('submit', function(e) {
                 e.preventDefault();
+                console.log('Settings form submitted');
                 
                 var googleClientId = $('#uipress_analytics_bridge_client_id').val();
                 var googleClientSecret = $('#uipress_analytics_bridge_client_secret').val();
@@ -434,6 +457,7 @@
                         settings: JSON.stringify(settings)
                     },
                     success: function(response) {
+                        console.log('AJAX response for settings save:', response);
                         UIPressAnalyticsBridgeUI.hideLoader();
                         
                         if (response.success) {
@@ -449,6 +473,7 @@
                         }
                     },
                     error: function(xhr, status, error) {
+                        console.log('AJAX error for settings save:', xhr, status, error);
                         UIPressAnalyticsBridgeUI.hideLoader();
                         UIPressAnalyticsBridgeUI.showError(
                             uipressAnalyticsBridgeAdmin.strings.error, 
@@ -462,6 +487,7 @@
         initClearCache: function() {
             $('.uipress-analytics-bridge-clear-cache').on('click', function(e) {
                 e.preventDefault();
+                console.log('Clear cache button clicked');
                 
                 var $button = $(this);
                 var originalText = $button.text();
@@ -477,6 +503,7 @@
                         network: uipressAnalyticsBridgeAdmin.isNetwork
                     },
                     success: function(response) {
+                        console.log('AJAX response for clear cache:', response);
                         $button.text(originalText).prop('disabled', false);
                         
                         if (response.success) {
@@ -492,6 +519,7 @@
                         }
                     },
                     error: function(xhr, status, error) {
+                        console.log('AJAX error for clear cache:', xhr, status, error);
                         $button.text(originalText).prop('disabled', false);
                         UIPressAnalyticsBridgeUI.showError(
                             uipressAnalyticsBridgeAdmin.strings.error, 
@@ -504,46 +532,70 @@
     };
 
     /**
+     * Property Selection Page Handler
+     */
+    window.UIPressAnalyticsBridgePropertyPage = {
+        init: function() {
+            console.log('Initializing property selection page handler');
+            this.initPropertySelection();
+        },
+
+        initPropertySelection: function() {
+            $(document).on('click', '.uipress-analytics-bridge-select-property', function(e) {
+                e.preventDefault();
+                console.log('Property selection button clicked');
+                
+                var propertyId = $(this).data('property-id');
+                var measurementId = $(this).data('measurement-id');
+                var accountId = $(this).data('account-id');
+                
+                console.log('Property ID:', propertyId);
+                console.log('Measurement ID:', measurementId);
+                console.log('Account ID:', accountId);
+                
+                UIPressAnalyticsBridgeUI.showLoader();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'uipress_analytics_bridge_select_property',
+                        nonce: uipressAnalyticsBridgeAdmin.nonce,
+                        network: uipressAnalyticsBridgeAdmin.isNetwork,
+                        property_id: propertyId,
+                        measurement_id: measurementId,
+                        account_id: accountId
+                    },
+                    success: function(response) {
+                        console.log('AJAX response for property selection:', response);
+                        UIPressAnalyticsBridgeUI.hideLoader();
+                        
+                        if (response.success) {
+                            window.location.href = uipressAnalyticsBridgeAdmin.settingsUrl + '&auth=success';
+                        } else {
+                            alert(response.data && response.data.message ? response.data.message : 'Failed to select property.');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.log('AJAX error for property selection:', xhr, status, error);
+                        UIPressAnalyticsBridgeUI.hideLoader();
+                        alert('AJAX request failed: ' + (error || status));
+                    }
+                });
+            });
+        }
+    };
+
+    /**
      * Initialize on document ready
      */
     $(document).ready(function() {
+        console.log('Document ready - initializing UIPress Analytics Bridge');
+        console.log('Admin data:', uipressAnalyticsBridgeAdmin);
+        
         UIPressAnalyticsBridgeAuth.init();
         UIPressAnalyticsBridgeSettings.init();
-
-        // Init property selection for properties page
-        $('.uipress-analytics-bridge-select-property').on('click', function() {
-            var propertyId = $(this).data('property-id');
-            var measurementId = $(this).data('measurement-id');
-            var accountId = $(this).data('account-id');
-            
-            UIPressAnalyticsBridgeUI.showLoader();
-            
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'uipress_analytics_bridge_select_property',
-                    nonce: uipressAnalyticsBridgeAdmin.nonce,
-                    network: uipressAnalyticsBridgeAdmin.isNetwork,
-                    property_id: propertyId,
-                    measurement_id: measurementId,
-                    account_id: accountId
-                },
-                success: function(response) {
-                    UIPressAnalyticsBridgeUI.hideLoader();
-                    
-                    if (response.success) {
-                        window.location.href = uipressAnalyticsBridgeAdmin.settingsUrl + '&auth=success';
-                    } else {
-                        alert(response.data.message || 'Failed to select property.');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    UIPressAnalyticsBridgeUI.hideLoader();
-                    alert('AJAX request failed: ' + (error || status));
-                }
-            });
-        });
+        UIPressAnalyticsBridgePropertyPage.init();
     });
 
 })(jQuery);
