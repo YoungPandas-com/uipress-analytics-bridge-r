@@ -103,6 +103,7 @@ class UIPress_Analytics_Bridge_Auth {
         add_action('wp_ajax_uipress_analytics_bridge_auth', array($this, 'handle_auth'));
         add_action('wp_ajax_uipress_analytics_bridge_verify', array($this, 'handle_verify'));
         add_action('wp_ajax_uipress_analytics_bridge_deauth', array($this, 'handle_deauth'));
+        add_action('wp_ajax_uipress_analytics_bridge_select_property', array($this, 'handle_property_selection'));
         
         // Intercept UIPress Pro hooks
         add_action('wp_ajax_uip_build_google_analytics_query', array($this, 'intercept_build_query'), 1);
@@ -697,6 +698,59 @@ class UIPress_Analytics_Bridge_Auth {
             
             wp_send_json_success();
         }
+    }
+
+    /**
+     * Handle property selection
+     *
+     * @since 1.0.0
+     * @access public
+     * @return void
+     */
+    public function handle_property_selection() {
+        // Verify nonce
+        check_ajax_referer('uipress-analytics-bridge-nonce', 'nonce');
+        
+        // Check capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array(
+                'message' => __('You do not have permission to perform this action.', 'uipress-analytics-bridge')
+            ));
+        }
+        
+        // Get data
+        $property_id = isset($_POST['property_id']) ? sanitize_text_field($_POST['property_id']) : '';
+        $measurement_id = isset($_POST['measurement_id']) ? sanitize_text_field($_POST['measurement_id']) : '';
+        $account_id = isset($_POST['account_id']) ? sanitize_text_field($_POST['account_id']) : '';
+        $is_network = isset($_POST['network']) && $_POST['network'] === 'network';
+        
+        if (empty($property_id) || empty($measurement_id) || empty($account_id)) {
+            wp_send_json_error(array(
+                'message' => __('Missing required property information.', 'uipress-analytics-bridge')
+            ));
+        }
+        
+        // Get current profile
+        $profile = $this->get_analytics_profile(true, $is_network);
+        
+        if (empty($profile)) {
+            wp_send_json_error(array(
+                'message' => __('No authentication profile found.', 'uipress-analytics-bridge')
+            ));
+        }
+        
+        // Update profile with selected property
+        $profile['w'] = $property_id;
+        $profile['p'] = $property_id; // In GA4, we use property ID as view ID
+        $profile['v4'] = $measurement_id;
+        $profile['a'] = $account_id;
+        
+        // Save profile
+        $this->set_analytics_profile($profile, $is_network);
+        
+        wp_send_json_success(array(
+            'message' => __('Property selected successfully.', 'uipress-analytics-bridge')
+        ));
     }
 
     /**

@@ -483,4 +483,46 @@ class UIPress_Analytics_Bridge_Account_Selector {
         <?php
         return ob_get_clean();
     }
+    
+    /**
+     * Render property selection modal
+     *
+     * @since 1.0.0
+     * @access public
+     * @param array $properties Analytics properties
+     * @return string HTML for property selection modal
+     */
+    public function render_property_selection_modal($properties) {
+        ob_start();
+        ?>
+        <div id="uipress-analytics-bridge-property-modal" class="uipress-analytics-bridge-modal">
+            <div class="uipress-analytics-bridge-modal-content">
+                <div class="uipress-analytics-bridge-modal-header">
+                    <h2 class="uipress-analytics-bridge-modal-title"><?php _e('Select Google Analytics Property', 'uipress-analytics-bridge'); ?></h2>
+                    <span class="uipress-analytics-bridge-modal-close" data-action="close">&times;</span>
+                </div>
+                <div class="uipress-analytics-bridge-modal-body">
+                    <p><?php _e('Select the Google Analytics property you want to connect:', 'uipress-analytics-bridge'); ?></p>
+                    
+                    <div class="uipress-analytics-bridge-properties-list">
+                        <?php foreach ($properties as $property) : ?>
+                        <div class="uipress-analytics-bridge-property-item" data-property-id="<?php echo esc_attr($property['property_id']); ?>" data-measurement-id="<?php echo esc_attr($property['measurement_id']); ?>" data-account-id="<?php echo esc_attr($property['account_id']); ?>">
+                            <div class="uipress-analytics-bridge-property-name"><?php echo esc_html($property['property_name']); ?></div>
+                            <div class="uipress-analytics-bridge-property-details">
+                                <?php echo esc_html($property['account_name']); ?> &middot; 
+                                <?php echo esc_html($property['measurement_id']); ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div class="uipress-analytics-bridge-modal-footer">
+                    <button type="button" class="button button-secondary" data-action="close"><?php _e('Cancel', 'uipress-analytics-bridge'); ?></button>
+                    <button type="button" class="button button-primary" data-action="select" disabled><?php _e('Select Property', 'uipress-analytics-bridge'); ?></button>
+                </div>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
 }

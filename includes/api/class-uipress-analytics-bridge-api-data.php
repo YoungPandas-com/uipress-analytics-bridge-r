@@ -49,18 +49,17 @@ class UIPress_Analytics_Bridge_API_Data {
      * @access public
      * @param string $startDate Start date (YYYY-MM-DD)
      * @param string $endDate End date (YYYY-MM-DD)
-     * @param string $metrics Metrics to retrieve (comma-separated)
-     * @param string $dimensions Dimensions to group by (comma-separated)
-     * @param array $args Additional arguments
+     * @param string $metrics Metrics to retrieve
+     * @param string $dimensions Dimensions to group by
      * @return array Analytics data
      */
-    public function get_analytics_data($startDate, $endDate, $metrics, $dimensions = 'ga:date', $args = array()) {
+    public function get_analytics_data($startDate, $endDate, $metrics, $dimensions = 'ga:date') {
         // Get auth
         $auth = new UIPress_Analytics_Bridge_Auth();
         $profile = $auth->get_analytics_profile();
         
         // Check if authenticated
-        if (empty($profile) || empty($profile['key']) || empty($profile['token']) || empty($profile['v4'])) {
+        if (empty($profile) || empty($profile['token']) || empty($profile['v4'])) {
             return array(
                 'success' => false,
                 'message' => __('Not authenticated.', 'uipress-analytics-bridge'),
@@ -68,30 +67,54 @@ class UIPress_Analytics_Bridge_API_Data {
             );
         }
         
-        // Build request
-        $request_args = array(
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-            'metrics' => $metrics,
-            'dimensions' => $dimensions,
-            'key' => $profile['key'],
-            'token' => $profile['token'],
-            'v4' => $profile['v4'],
-            'view' => isset($profile['viewname']) ? $profile['viewname'] : '',
-            'a' => isset($profile['a']) ? $profile['a'] : '',
-            'w' => isset($profile['w']) ? $profile['w'] : '',
-            'p' => isset($profile['p']) ? $profile['p'] : '',
-            'site' => home_url(),
-            'version' => UIPRESS_ANALYTICS_BRIDGE_VERSION,
+        // Check if token needs refresh
+        $api_auth = new UIPress_Analytics_Bridge_API_Auth();
+        $token_refresh = $api_auth->maybe_refresh_token($profile);
+        
+        if ($token_refresh && !is_wp_error($token_refresh)) {
+            // Token was refreshed, update the profile
+            $profile = $auth->get_analytics_profile(true);
+        } elseif (is_wp_error($token_refresh)) {
+            return array(
+                'success' => false,
+                'message' => $token_refresh->get_error_message(),
+                'error_type' => 'token_refresh_error',
+            );
+        }
+        
+        // Now make the actual analytics data request
+        $property_id = $profile['w'];
+        $access_token = $profile['token'];
+        
+        // Build the Google Analytics Data API v1 request
+        $url = "https://analyticsdata.googleapis.com/v1beta/properties/{$property_id}:runReport";
+        
+        $request_body = array(
+            'dateRanges' => array(
+                array(
+                    'startDate' => $startDate,
+                    'endDate' => $endDate,
+                ),
+            ),
+            'dimensions' => array(
+                array('name' => 'date'),
+            ),
+            'metrics' => array(
+                array('name' => 'activeUsers'),
+                array('name' => 'sessions'),
+                array('name' => 'screenPageViews'),
+            ),
         );
         
-        // Add additional args
-        $request_args = array_merge($request_args, $args);
+        $response = wp_remote_post($url, array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $access_token,
+                'Content-Type' => 'application/json',
+            ),
+            'body' => json_encode($request_body),
+            'timeout' => 15,
+        ));
         
-        // Send request
-        $response = $this->send_api_request($request_args);
-        
-        // Process response
         if (is_wp_error($response)) {
             return array(
                 'success' => false,
@@ -100,7 +123,6 @@ class UIPress_Analytics_Bridge_API_Data {
             );
         }
         
-        // Check response code
         $response_code = wp_remote_retrieve_response_code($response);
         if ($response_code !== 200) {
             return array(
@@ -110,24 +132,84 @@ class UIPress_Analytics_Bridge_API_Data {
             );
         }
         
-        // Parse response
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
         
-        // Check if successful
-        if (!isset($data['success']) || !$data['success']) {
-            $message = isset($data['message']) ? $data['message'] : __('Unknown API error', 'uipress-analytics-bridge');
-            $error_type = isset($data['error_type']) ? $data['error_type'] : 'api_error';
+        // Format data for UIPress
+        $formatted_data = $this->format_ga4_data_for_uipress($data, $profile);
+        
+        return $formatted_data;
+    }
+
+    /**
+     * Format GA4 data for UIPress
+     *
+     * @since 1.0.0
+     * @access private
+     * @param array $data Raw GA4 data
+     * @param array $profile Analytics profile
+     * @return array Formatted data
+     */
+    private function format_ga4_data_for_uipress($data, $profile) {
+        // Initialize the response structure
+        $response = array(
+            'success' => true,
+            'connected' => true,
+            'data' => array(),
+            'totalStats' => array(
+                'users' => 0,
+                'pageviews' => 0,
+                'sessions' => 0,
+                'change' => array(
+                    'users' => 0,
+                    'pageviews' => 0,
+                    'sessions' => 0,
+                ),
+            ),
+            'topContent' => array(),
+            'topSources' => array(),
+            'google_account' => array(
+                'view' => isset($profile['viewname']) ? $profile['viewname'] : '',
+                'code' => isset($profile['v4']) ? $profile['v4'] : '',
+                'token' => isset($profile['token']) ? $profile['token'] : '',
+            ),
+            'gafour' => true,
+            'property' => isset($profile['w']) ? $profile['w'] : '',
+            'measurement_id' => isset($profile['v4']) ? $profile['v4'] : '',
+        );
+        
+        // Process the rows data
+        if (!empty($data) && isset($data['rows']) && !empty($data['rows'])) {
+            $total_users = 0;
+            $total_sessions = 0;
+            $total_pageviews = 0;
             
-            return array(
-                'success' => false,
-                'message' => $message,
-                'error_type' => $error_type,
-            );
+            foreach ($data['rows'] as $row) {
+                $date = $row['dimensionValues'][0]['value'];
+                $formatted_date = substr($date, 0, 4) . '-' . substr($date, 4, 2) . '-' . substr($date, 6, 2);
+                
+                $users = isset($row['metricValues'][0]['value']) ? (int)$row['metricValues'][0]['value'] : 0;
+                $sessions = isset($row['metricValues'][1]['value']) ? (int)$row['metricValues'][1]['value'] : 0;
+                $pageviews = isset($row['metricValues'][2]['value']) ? (int)$row['metricValues'][2]['value'] : 0;
+                
+                $total_users += $users;
+                $total_sessions += $sessions;
+                $total_pageviews += $pageviews;
+                
+                $response['data'][] = array(
+                    'name' => $formatted_date,
+                    'value' => $users,
+                    'pageviews' => $pageviews,
+                    'sessions' => $sessions,
+                );
+            }
+            
+            // Set total stats
+            $response['totalStats']['users'] = $total_users;
+            $response['totalStats']['sessions'] = $total_sessions;
+            $response['totalStats']['pageviews'] = $total_pageviews;
         }
         
-        // Return data
-        return $data;
+        return $response;
     }
 
     /**

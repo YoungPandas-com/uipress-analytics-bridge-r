@@ -20,6 +20,19 @@
             // Authentication button
             $('.uipress-analytics-bridge-auth').on('click', function(e) {
                 e.preventDefault();
+                
+                // Check if credentials are entered
+                var clientId = $('#uipress_analytics_bridge_client_id').val();
+                var clientSecret = $('#uipress_analytics_bridge_client_secret').val();
+                
+                if (!clientId || !clientSecret) {
+                    UIPressAnalyticsBridgeUI.showError(
+                        uipressAnalyticsBridgeAdmin.strings.error, 
+                        'Please enter your Google API Client ID and Client Secret before connecting.'
+                    );
+                    return;
+                }
+                
                 UIPressAnalyticsBridgeAuth.authenticate();
             });
 
@@ -61,6 +74,14 @@
                     UIPressAnalyticsBridgeUI.hideLoader();
                     
                     if (response.success && response.data.redirect) {
+                        if (response.data.redirect === '') {
+                            UIPressAnalyticsBridgeUI.showError(
+                                uipressAnalyticsBridgeAdmin.strings.error, 
+                                'Unable to create authentication URL. Please check your API credentials.'
+                            );
+                            return;
+                        }
+                        
                         // Open popup window for authentication
                         var authWindow = window.open(response.data.redirect, 'uipressAnalyticsBridgeAuth', 'width=600,height=700');
                         
@@ -76,15 +97,24 @@
                                 }
                             }, 500);
                         } else {
-                            UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'Popup window was blocked. Please allow popups for this site and try again.');
+                            UIPressAnalyticsBridgeUI.showError(
+                                uipressAnalyticsBridgeAdmin.strings.error, 
+                                'Popup window was blocked. Please allow popups for this site and try again.'
+                            );
                         }
                     } else {
-                        UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, response.data.message || 'Failed to get authentication URL.');
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            response.data && response.data.message ? response.data.message : 'Failed to get authentication URL.'
+                        );
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
                     UIPressAnalyticsBridgeUI.hideLoader();
-                    UIPressAnalyticsBridgeUI.showError(uipressAnalyticsBridgeAdmin.strings.error, 'AJAX request failed.');
+                    UIPressAnalyticsBridgeUI.showError(
+                        uipressAnalyticsBridgeAdmin.strings.error, 
+                        'AJAX request failed: ' + (error || status)
+                    );
                 }
             });
         },
@@ -199,6 +229,129 @@
         initAccountSelector: function() {
             // Account selector functionality would go here
             // This will be implemented in a future version
+        }
+    };
+
+    /**
+     * Property Selection Handler
+     */
+    var UIPressAnalyticsBridgePropertySelector = {
+        properties: [],
+        selectedProperty: null,
+        
+        init: function(properties) {
+            this.properties = properties;
+            this.renderModal();
+            this.initEvents();
+        },
+        
+        renderModal: function() {
+            // Create modal HTML
+            var html = '<div id="uipress-analytics-bridge-property-modal" class="uipress-analytics-bridge-modal">';
+            html += '<div class="uipress-analytics-bridge-modal-content">';
+            html += '<div class="uipress-analytics-bridge-modal-header">';
+            html += '<h2 class="uipress-analytics-bridge-modal-title">Select Google Analytics Property</h2>';
+            html += '<span class="uipress-analytics-bridge-modal-close" data-action="close">&times;</span>';
+            html += '</div>';
+            html += '<div class="uipress-analytics-bridge-modal-body">';
+            html += '<p>Select the Google Analytics property you want to connect:</p>';
+            html += '<div class="uipress-analytics-bridge-properties-list">';
+            
+            // Add properties
+            for (var i = 0; i < this.properties.length; i++) {
+                var property = this.properties[i];
+                html += '<div class="uipress-analytics-bridge-property-item" ';
+                html += 'data-property-id="' + property.property_id + '" ';
+                html += 'data-measurement-id="' + property.measurement_id + '" ';
+                html += 'data-account-id="' + property.account_id + '">';
+                html += '<div class="uipress-analytics-bridge-property-name">' + property.property_name + '</div>';
+                html += '<div class="uipress-analytics-bridge-property-details">';
+                html += property.account_name + ' &middot; ' + property.measurement_id;
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            html += '</div>';
+            html += '<div class="uipress-analytics-bridge-modal-footer">';
+            html += '<button type="button" class="button button-secondary" data-action="close">Cancel</button>';
+            html += '<button type="button" class="button button-primary" data-action="select" disabled>Select Property</button>';
+            html += '</div>';
+            html += '</div>';
+            html += '</div>';
+            
+            // Add to document
+            $('body').append(html);
+        },
+        
+        initEvents: function() {
+            var self = this;
+            
+            // Property selection
+            $('.uipress-analytics-bridge-property-item').on('click', function() {
+                $('.uipress-analytics-bridge-property-item').removeClass('selected');
+                $(this).addClass('selected');
+                
+                self.selectedProperty = {
+                    property_id: $(this).data('property-id'),
+                    measurement_id: $(this).data('measurement-id'),
+                    account_id: $(this).data('account-id')
+                };
+                
+                $('.uipress-analytics-bridge-modal-footer button[data-action="select"]').prop('disabled', false);
+            });
+            
+            // Modal buttons
+            $('.uipress-analytics-bridge-modal-footer button[data-action="close"], .uipress-analytics-bridge-modal-close').on('click', function() {
+                self.closeModal();
+            });
+            
+            $('.uipress-analytics-bridge-modal-footer button[data-action="select"]').on('click', function() {
+                if (self.selectedProperty) {
+                    self.selectProperty(self.selectedProperty);
+                }
+            });
+        },
+        
+        closeModal: function() {
+            $('#uipress-analytics-bridge-property-modal').remove();
+        },
+        
+        selectProperty: function(property) {
+            UIPressAnalyticsBridgeUI.showLoader();
+            
+            $.ajax({
+                url: uipressAnalyticsBridgeAdmin.ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'uipress_analytics_bridge_select_property',
+                    nonce: uipressAnalyticsBridgeAdmin.nonce,
+                    network: uipressAnalyticsBridgeAdmin.isNetwork,
+                    property_id: property.property_id,
+                    measurement_id: property.measurement_id,
+                    account_id: property.account_id
+                },
+                success: function(response) {
+                    UIPressAnalyticsBridgeUI.hideLoader();
+                    
+                    if (response.success) {
+                        UIPressAnalyticsBridgePropertySelector.closeModal();
+                        location.reload();
+                    } else {
+                        UIPressAnalyticsBridgeUI.showError(
+                            uipressAnalyticsBridgeAdmin.strings.error, 
+                            response.data && response.data.message ? response.data.message : 'Failed to select property.'
+                        );
+                    }
+                },
+                error: function() {
+                    UIPressAnalyticsBridgeUI.hideLoader();
+                    UIPressAnalyticsBridgeUI.showError(
+                        uipressAnalyticsBridgeAdmin.strings.error, 
+                        'AJAX request failed.'
+                    );
+                }
+            });
         }
     };
 

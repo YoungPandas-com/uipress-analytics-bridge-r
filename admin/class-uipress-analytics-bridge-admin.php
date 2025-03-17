@@ -204,6 +204,15 @@ class UIPress_Analytics_Bridge_Admin {
         );
         
         add_settings_field(
+            'uipress_analytics_bridge_api_credentials',
+            __('Google API Credentials', 'uipress-analytics-bridge'),
+            array($this, 'render_api_credentials_field'),
+            'uipress-analytics-bridge',
+            'uipress_analytics_bridge_main_section',
+            array('label_for' => 'uipress_analytics_bridge_client_id')
+        );
+        
+        add_settings_field(
             'uipress_analytics_bridge_auth',
             __('Authentication', 'uipress-analytics-bridge'),
             array($this, 'render_auth_field'),
@@ -390,6 +399,10 @@ class UIPress_Analytics_Bridge_Admin {
         // Cache duration
         $sanitized['cache_duration'] = isset($settings['cache_duration']) ? absint($settings['cache_duration']) : 3600;
         
+        // Google API credentials
+        $sanitized['google_client_id'] = isset($settings['google_client_id']) ? sanitize_text_field($settings['google_client_id']) : '';
+        $sanitized['google_client_secret'] = isset($settings['google_client_secret']) ? sanitize_text_field($settings['google_client_secret']) : '';
+        
         return $sanitized;
     }
 
@@ -424,6 +437,12 @@ class UIPress_Analytics_Bridge_Admin {
                 </div>
             </div>
             <?php
+            return;
+        }
+        
+        // Check if we need to show property selection
+        if (isset($_GET['select_property']) && $_GET['select_property'] == '1') {
+            $this->render_property_selection_page();
             return;
         }
         
@@ -480,6 +499,130 @@ class UIPress_Analytics_Bridge_Admin {
     }
 
     /**
+     * Render property selection page
+     *
+     * @since 1.0.0
+     * @access private
+     * @return void
+     */
+    private function render_property_selection_page() {
+        $is_network = is_network_admin();
+        
+        // Get auth
+        $auth = new UIPress_Analytics_Bridge_Auth();
+        $profile = $auth->get_analytics_profile(true, $is_network);
+        
+        // Get API data handler
+        $api_data = new UIPress_Analytics_Bridge_API_Data();
+        
+        // Check if we have a valid token
+        if (empty($profile) || empty($profile['token'])) {
+            ?>
+            <div class="wrap">
+                <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+                <div class="notice notice-error">
+                    <p><?php _e('Missing authentication token. Please try authenticating again.', 'uipress-analytics-bridge'); ?></p>
+                    <p><a href="<?php echo esc_url(admin_url('options-general.php?page=uipress-analytics-bridge')); ?>" class="button button-primary"><?php _e('Back to Settings', 'uipress-analytics-bridge'); ?></a></p>
+                </div>
+            </div>
+            <?php
+            return;
+        }
+        
+        // Fetch properties
+        $properties = $api_data->get_analytics_properties($profile['token']);
+        
+        if (is_wp_error($properties)) {
+            ?>
+            <div class="wrap">
+                <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+                <div class="notice notice-error">
+                    <p><?php echo esc_html($properties->get_error_message()); ?></p>
+                    <p><a href="<?php echo esc_url(admin_url('options-general.php?page=uipress-analytics-bridge')); ?>" class="button button-primary"><?php _e('Back to Settings', 'uipress-analytics-bridge'); ?></a></p>
+                </div>
+            </div>
+            <?php
+            return;
+        }
+        
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            
+            <div class="uipress-analytics-bridge-header">
+                <div class="uipress-analytics-bridge-header-content">
+                    <p><?php _e('Select the Google Analytics property you want to connect to UIPress Pro.', 'uipress-analytics-bridge'); ?></p>
+                </div>
+            </div>
+            
+            <div class="uipress-analytics-bridge-properties-container">
+                <h2><?php _e('Available Properties', 'uipress-analytics-bridge'); ?></h2>
+                
+                <div class="uipress-analytics-bridge-properties">
+                    <?php foreach ($properties as $property) : ?>
+                    <div class="uipress-analytics-bridge-property-card">
+                        <h3><?php echo esc_html($property['property_name']); ?></h3>
+                        <p class="uipress-analytics-bridge-property-account"><?php echo esc_html($property['account_name']); ?></p>
+                        <p class="uipress-analytics-bridge-property-id"><?php echo esc_html($property['measurement_id']); ?></p>
+                        <button type="button" class="button button-primary uipress-analytics-bridge-select-property" 
+                            data-property-id="<?php echo esc_attr($property['property_id']); ?>" 
+                            data-measurement-id="<?php echo esc_attr($property['measurement_id']); ?>" 
+                            data-account-id="<?php echo esc_attr($property['account_id']); ?>">
+                            <?php _e('Select This Property', 'uipress-analytics-bridge'); ?>
+                        </button>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            
+            <div class="uipress-analytics-bridge-footer">
+                <p>
+                    <a href="<?php echo esc_url(admin_url('options-general.php?page=uipress-analytics-bridge')); ?>" class="button"><?php _e('Back to Settings', 'uipress-analytics-bridge'); ?></a>
+                </p>
+            </div>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('.uipress-analytics-bridge-select-property').on('click', function() {
+                var propertyId = $(this).data('property-id');
+                var measurementId = $(this).data('measurement-id');
+                var accountId = $(this).data('account-id');
+                
+                UIPressAnalyticsBridgeUI.showLoader();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'uipress_analytics_bridge_select_property',
+                        nonce: '<?php echo wp_create_nonce('uipress-analytics-bridge-nonce'); ?>',
+                        network: '<?php echo $is_network ? 'network' : 'site'; ?>',
+                        property_id: propertyId,
+                        measurement_id: measurementId,
+                        account_id: accountId
+                    },
+                    success: function(response) {
+                        UIPressAnalyticsBridgeUI.hideLoader();
+                        
+                        if (response.success) {
+                            window.location.href = '<?php echo admin_url('options-general.php?page=uipress-analytics-bridge&auth=success'); ?>';
+                        } else {
+                            alert(response.data.message || 'Failed to select property.');
+                        }
+                    },
+                    error: function() {
+                        UIPressAnalyticsBridgeUI.hideLoader();
+                        alert('AJAX request failed.');
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
+    }
+
+    /**
      * Render main section.
      *
      * @since 1.0.0
@@ -489,6 +632,65 @@ class UIPress_Analytics_Bridge_Admin {
     public function render_main_section() {
         ?>
         <p><?php _e('Configure your Google Analytics integration for UIPress Pro.', 'uipress-analytics-bridge'); ?></p>
+        <?php
+    }
+
+    /**
+     * Render Google API credentials field.
+     *
+     * @since 1.0.0
+     * @access public
+     * @return void
+     */
+    public function render_api_credentials_field() {
+        $settings = is_network_admin() 
+            ? get_site_option('uipress_analytics_bridge_settings', array()) 
+            : get_option('uipress_analytics_bridge_settings', array());
+        
+        $client_id = isset($settings['google_client_id']) ? $settings['google_client_id'] : '';
+        $client_secret = isset($settings['google_client_secret']) ? $settings['google_client_secret'] : '';
+        
+        ?>
+        <div class="uipress-analytics-bridge-field">
+            <h3><?php _e('Google API Credentials', 'uipress-analytics-bridge'); ?></h3>
+            <p class="description">
+                <?php _e('To connect to Google Analytics, you need to create a project in the Google Cloud Console.', 'uipress-analytics-bridge'); ?>
+                <a href="https://developers.google.com/analytics/devguides/reporting/data/v1/quickstart-client-libraries" target="_blank">
+                    <?php _e('Learn how to create a project and get credentials', 'uipress-analytics-bridge'); ?>
+                </a>
+            </p>
+            
+            <div class="uipress-analytics-bridge-form-group">
+                <label for="uipress_analytics_bridge_client_id">
+                    <?php _e('Client ID', 'uipress-analytics-bridge'); ?>
+                </label>
+                <input type="text" 
+                    id="uipress_analytics_bridge_client_id" 
+                    name="uipress_analytics_bridge_settings[google_client_id]" 
+                    value="<?php echo esc_attr($client_id); ?>" 
+                    class="regular-text"
+                    placeholder="123456789-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com"
+                >
+            </div>
+            
+            <div class="uipress-analytics-bridge-form-group">
+                <label for="uipress_analytics_bridge_client_secret">
+                    <?php _e('Client Secret', 'uipress-analytics-bridge'); ?>
+                </label>
+                <input type="password" 
+                    id="uipress_analytics_bridge_client_secret" 
+                    name="uipress_analytics_bridge_settings[google_client_secret]" 
+                    value="<?php echo esc_attr($client_secret); ?>" 
+                    class="regular-text"
+                    placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx"
+                >
+            </div>
+            
+            <p class="description">
+                <?php _e('Make sure to add the following redirect URI to your Google Cloud Console project:', 'uipress-analytics-bridge'); ?>
+                <code><?php echo admin_url('admin.php?uipress-analytics-bridge-auth=callback'); ?></code>
+            </p>
+        </div>
         <?php
     }
 
