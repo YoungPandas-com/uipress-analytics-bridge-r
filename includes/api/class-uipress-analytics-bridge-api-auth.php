@@ -89,6 +89,8 @@ class UIPress_Analytics_Bridge_API_Auth {
             return;
         }
         
+        uipress_analytics_bridge_debug('Auth callback initiated');
+        
         if (!current_user_can('manage_options')) {
             wp_die(__('You do not have permission to perform this action.', 'uipress-analytics-bridge'));
         }
@@ -96,12 +98,12 @@ class UIPress_Analytics_Bridge_API_Auth {
         // Verify state parameter (same as transit token)
         $auth = new UIPress_Analytics_Bridge_Auth();
         if (empty($_GET['state']) || !$auth->validate_tt($_GET['state'])) {
-            wp_die(__('Invalid security token.', 'uipress-analytics-bridge'));
+            wp_die(__('Invalid security token. Please try again.', 'uipress-analytics-bridge'));
         }
         
         // Check for required parameters
         if (empty($_GET['code'])) {
-            wp_die(__('Missing authorization code.', 'uipress-analytics-bridge'));
+            wp_die(__('Missing authorization code. Please try again.', 'uipress-analytics-bridge'));
         }
         
         $is_network = isset($_GET['network']) && $_GET['network'] === 'network';
@@ -115,7 +117,7 @@ class UIPress_Analytics_Bridge_API_Auth {
         $client_secret = isset($settings['google_client_secret']) ? $settings['google_client_secret'] : '';
         
         if (empty($client_id) || empty($client_secret)) {
-            wp_die(__('API credentials are missing.', 'uipress-analytics-bridge'));
+            wp_die(__('API credentials are missing. Please configure your Google API credentials in the plugin settings.', 'uipress-analytics-bridge'));
         }
         
         // Build callback URL
@@ -123,6 +125,16 @@ class UIPress_Analytics_Bridge_API_Auth {
         if ($is_network) {
             $callback_url = network_admin_url('admin.php?uipress-analytics-bridge-auth=callback');
         }
+        
+        // Add network parameter if needed
+        if ($is_network) {
+            $callback_url = add_query_arg('network', 'network', $callback_url);
+        }
+        
+        uipress_analytics_bridge_debug('Exchanging code for token', array(
+            'code_exists' => !empty($_GET['code']),
+            'callback_url' => $callback_url
+        ));
         
         // Exchange code for token
         $response = wp_remote_post($this->google_token_url, array(
@@ -133,35 +145,63 @@ class UIPress_Analytics_Bridge_API_Auth {
                 'redirect_uri' => $callback_url,
                 'grant_type' => 'authorization_code',
             ),
+            'timeout' => 15,
         ));
         
         if (is_wp_error($response)) {
+            uipress_analytics_bridge_debug('Error exchanging code for token', $response->get_error_message());
             wp_die(__('Error exchanging code for access token: ', 'uipress-analytics-bridge') . $response->get_error_message());
         }
         
-        $token_data = json_decode(wp_remote_retrieve_body($response), true);
+        $response_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $token_data = json_decode($body, true);
         
-        if (empty($token_data) || !isset($token_data['access_token'])) {
-            wp_die(__('Invalid response from Google when exchanging code for token.', 'uipress-analytics-bridge'));
+        uipress_analytics_bridge_debug('Token exchange response', array(
+            'status' => $response_code,
+            'success' => isset($token_data['access_token']),
+        ));
+        
+        if ($response_code !== 200 || empty($token_data) || !isset($token_data['access_token'])) {
+            $error_message = isset($token_data['error_description']) ? $token_data['error_description'] : __('Invalid response from Google when exchanging code for token.', 'uipress-analytics-bridge');
+            uipress_analytics_bridge_debug('Token exchange failed', array(
+                'response' => $token_data,
+                'error' => $error_message
+            ));
+            wp_die($error_message);
         }
         
-        // Store the temporary authentication data
+        // Store the authentication data
         $profile = array(
             'key' => $client_id,
             'token' => $token_data['access_token'],
             'refresh_token' => isset($token_data['refresh_token']) ? $token_data['refresh_token'] : '',
             'expires_in' => isset($token_data['expires_in']) ? $token_data['expires_in'] : 3600,
             'token_created' => time(),
+            'token_type' => isset($token_data['token_type']) ? $token_data['token_type'] : 'Bearer',
         );
         
-        // Create profile with temporary data
+        uipress_analytics_bridge_debug('Authentication successful', array(
+            'profile' => array(
+                'token_exists' => !empty($profile['token']),
+                'refresh_token_exists' => !empty($profile['refresh_token']),
+                'expires_in' => $profile['expires_in'],
+            )
+        ));
+        
+        // Create profile with authentication data
         $auth->set_analytics_profile($profile, $is_network);
+        
+        // Rotate the transit token for security
+        $auth->rotate_tt($is_network);
         
         // Redirect to property selection page
         $redirect_url = admin_url('options-general.php?page=uipress-analytics-bridge&select_property=1');
         if ($is_network) {
             $redirect_url = network_admin_url('settings.php?page=uipress-analytics-bridge&select_property=1');
         }
+        
+        uipress_analytics_bridge_debug('Redirecting to property selection', $redirect_url);
         
         wp_redirect($redirect_url);
         exit;
@@ -209,6 +249,39 @@ class UIPress_Analytics_Bridge_API_Auth {
             return;
         }
         
+        // Build auth URL using the new method
+        $url = $this->build_auth_url('auth', $is_network);
+        
+        // Add this debug line before the json response
+        uipress_analytics_bridge_debug('Generated auth URL', $url);
+        
+        wp_send_json_success(array(
+            'redirect' => $url,
+        ));
+    }
+
+    /**
+     * Build authentication URL
+     *
+     * @since 1.0.0
+     * @access public
+     * @param string $auth_type Type of authentication
+     * @param bool $is_network Whether this is a network request
+     * @return string Authentication URL
+     */
+    public function build_auth_url($auth_type = 'auth', $is_network = false) {
+        // Get settings
+        $settings = $is_network 
+            ? get_site_option('uipress_analytics_bridge_settings', array()) 
+            : get_option('uipress_analytics_bridge_settings', array());
+        
+        $client_id = isset($settings['google_client_id']) ? $settings['google_client_id'] : '';
+        $client_secret = isset($settings['google_client_secret']) ? $settings['google_client_secret'] : '';
+        
+        if (empty($client_id) || empty($client_secret)) {
+            return '';
+        }
+        
         // Generate transit token
         $auth = new UIPress_Analytics_Bridge_Auth();
         $tt = $auth->generate_tt($is_network);
@@ -236,14 +309,39 @@ class UIPress_Analytics_Bridge_API_Auth {
         );
         
         // Build final URL
-        $url = add_query_arg($args, $this->google_auth_url);
+        return add_query_arg($args, $this->google_auth_url);
+    }
+
+    /**
+     * Maybe refresh token
+     *
+     * @since 1.0.0
+     * @access public
+     * @param array $profile Authentication profile
+     * @return bool|WP_Error True on success, false if not needed, WP_Error on failure
+     */
+    public function maybe_refresh_token($profile) {
+        // Check if we need to refresh the token
+        if (empty($profile) || empty($profile['token_created']) || empty($profile['expires_in']) || empty($profile['refresh_token'])) {
+            return false;
+        }
         
-        // Add this debug line before the json response
-        uipress_analytics_bridge_debug('Generated auth URL', $url);
+        $expiry_time = $profile['token_created'] + $profile['expires_in'] - 300; // Refresh 5 minutes before expiry
         
-        wp_send_json_success(array(
-            'redirect' => $url,
-        ));
+        if (time() > $expiry_time) {
+            uipress_analytics_bridge_debug('Token needs refreshing', array(
+                'created' => $profile['token_created'],
+                'expires_in' => $profile['expires_in'],
+                'expiry_time' => $expiry_time,
+                'current_time' => time()
+            ));
+            
+            // Token needs refresh
+            $api_data = new UIPress_Analytics_Bridge_API_Data();
+            return $api_data->refresh_token($profile);
+        }
+        
+        return false;
     }
 
     /**
