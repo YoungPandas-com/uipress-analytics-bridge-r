@@ -13,7 +13,7 @@
         init: function() {
             // Initialize auth actions
             this.initAuthButtons();
-            this.initAccountSelector();
+            // Removed the initAccountSelector call
         },
 
         initAuthButtons: function() {
@@ -32,6 +32,9 @@
                     );
                     return;
                 }
+                
+                // Save settings first to ensure credentials are stored
+                $('#uipress-analytics-bridge-settings-form').submit();
                 
                 UIPressAnalyticsBridgeAuth.authenticate();
             });
@@ -82,8 +85,8 @@
                             return;
                         }
                         
-                        // Open popup window for authentication
-                        var authWindow = window.open(response.data.redirect, 'uipressAnalyticsBridgeAuth', 'width=600,height=700');
+                        // Open popup window for authentication with increased dimensions
+                        var authWindow = window.open(response.data.redirect, 'uipressAnalyticsBridgeAuth', 'width=800,height=800');
                         
                         // Check if window was opened
                         if (authWindow) {

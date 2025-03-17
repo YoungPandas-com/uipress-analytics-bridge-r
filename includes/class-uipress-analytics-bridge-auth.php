@@ -169,8 +169,13 @@ class UIPress_Analytics_Bridge_Auth {
      * @return bool Whether token is valid
      */
     public function validate_tt($tt, $network = false) {
-        $stored_tt = $this->get_tt($network);
-        return hash_equals($stored_tt, $tt);
+        // Get the stored token
+        $stored_tt = $network 
+            ? get_site_option($this->network_tt_option_name, '')
+            : get_option($this->tt_option_name, '');
+        
+        // Use WordPress's secure hash comparison
+        return !empty($stored_tt) && hash_equals($stored_tt, $tt);
     }
 
     /**
@@ -182,7 +187,11 @@ class UIPress_Analytics_Bridge_Auth {
      * @return void
      */
     public function rotate_tt($network = false) {
-        $this->generate_tt($network);
+        if ($network) {
+            delete_site_option($this->network_tt_option_name);
+        } else {
+            delete_option($this->tt_option_name);
+        }
     }
 
     /**

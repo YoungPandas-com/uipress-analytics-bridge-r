@@ -650,6 +650,12 @@ class UIPress_Analytics_Bridge_Admin {
         $client_id = isset($settings['google_client_id']) ? $settings['google_client_id'] : '';
         $client_secret = isset($settings['google_client_secret']) ? $settings['google_client_secret'] : '';
         
+        // Determine callback URL for OAuth
+        $callback_url = admin_url('admin.php?uipress-analytics-bridge-auth=callback');
+        if (is_network_admin()) {
+            $callback_url = network_admin_url('admin.php?uipress-analytics-bridge-auth=callback');
+        }
+        
         ?>
         <div class="uipress-analytics-bridge-field">
             <h3><?php _e('Google API Credentials', 'uipress-analytics-bridge'); ?></h3>
@@ -686,10 +692,16 @@ class UIPress_Analytics_Bridge_Admin {
                 >
             </div>
             
-            <p class="description">
-                <?php _e('Make sure to add the following redirect URI to your Google Cloud Console project:', 'uipress-analytics-bridge'); ?>
-                <code><?php echo admin_url('admin.php?uipress-analytics-bridge-auth=callback'); ?></code>
-            </p>
+            <div class="uipress-analytics-bridge-form-group" style="margin-top: 20px; padding: 15px; background: #f8f8f8; border-left: 4px solid #0c5cef;">
+                <h4 style="margin-top: 0;"><?php _e('Important: Google OAuth Configuration', 'uipress-analytics-bridge'); ?></h4>
+                <p>
+                    <?php _e('You must add this exact URL as an authorized redirect URI in your Google Cloud Console OAuth settings:', 'uipress-analytics-bridge'); ?>
+                </p>
+                <code style="display: block; padding: 10px; background: #fff; border: 1px solid #ddd;"><?php echo esc_url($callback_url); ?></code>
+                <p>
+                    <?php _e('Without this, the authentication will fail!', 'uipress-analytics-bridge'); ?>
+                </p>
+            </div>
         </div>
         <?php
     }
@@ -717,6 +729,10 @@ class UIPress_Analytics_Bridge_Admin {
     public function render_auth_field() {
         $auth = new UIPress_Analytics_Bridge_Auth();
         $authenticated = $auth->is_authenticated(is_network_admin());
+        
+        // Get auth URL directly
+        $api_auth = new UIPress_Analytics_Bridge_API_Auth();
+        $direct_auth_url = $api_auth->build_auth_url('auth', is_network_admin());
         
         ?>
         <div class="uipress-analytics-bridge-field">
@@ -750,6 +766,12 @@ class UIPress_Analytics_Bridge_Admin {
                     <button type="button" class="button button-primary uipress-analytics-bridge-auth">
                         <?php _e('Connect Google Analytics', 'uipress-analytics-bridge'); ?>
                     </button>
+                    
+                    <?php if (!empty($direct_auth_url)) : ?>
+                    <a href="<?php echo esc_url($direct_auth_url); ?>" class="button button-secondary" style="margin-left: 10px;">
+                        <?php _e('Connect Directly (Alternative)', 'uipress-analytics-bridge'); ?>
+                    </a>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
             

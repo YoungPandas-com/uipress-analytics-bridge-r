@@ -51,49 +51,18 @@ class UIPress_Analytics_Bridge_API_Auth {
     private $required_scopes = 'https://www.googleapis.com/auth/analytics.readonly';
 
     /**
-     * Auth relay endpoint (legacy)
-     *
-     * @since 1.0.0
-     * @access private
-     * @var string
-     */
-    private $relay_endpoint = 'https://auth.example.com/analytics-relay/';
-
-    /**
-     * Authentication endpoint (legacy)
-     * 
-     * @since 1.0.0
-     * @access private
-     * @var string
-     */
-    private $auth_endpoint = 'auth';
-
-    /**
-     * Re-authentication endpoint (legacy)
-     * 
-     * @since 1.0.0
-     * @access private
-     * @var string
-     */
-    private $reauth_endpoint = 'reauth';
-
-    /**
-     * Verification endpoint (legacy)
-     * 
-     * @since 1.0.0
-     * @access private
-     * @var string
-     */
-    private $verify_endpoint = 'verify';
-
-    /**
      * Constructor
      *
      * @since 1.0.0
      * @access public
      */
     public function __construct() {
-        add_action('init', array($this, 'init'));
+        // Register AJAX handlers directly in constructor
+        add_action('wp_ajax_uipress_analytics_bridge_get_auth_url', array($this, 'get_auth_url'));
+        add_action('wp_ajax_uipress_analytics_bridge_verify_auth', array($this, 'verify_auth'));
+        
+        // Register auth callback listener
+        add_action('admin_init', array($this, 'auth_callback_listener'));
     }
 
     /**
@@ -104,12 +73,7 @@ class UIPress_Analytics_Bridge_API_Auth {
      * @return void
      */
     public function init() {
-        // Register auth callback listener
-        add_action('admin_init', array($this, 'auth_callback_listener'));
-        
-        // Register AJAX handlers
-        add_action('wp_ajax_uipress_analytics_bridge_get_auth_url', array($this, 'get_auth_url'));
-        add_action('wp_ajax_uipress_analytics_bridge_verify_auth', array($this, 'verify_auth'));
+        // This method left intentionally empty, as we're registering actions in the constructor
     }
 
     /**
@@ -125,7 +89,6 @@ class UIPress_Analytics_Bridge_API_Auth {
             return;
         }
         
-        // Check if user can manage options
         if (!current_user_can('manage_options')) {
             wp_die(__('You do not have permission to perform this action.', 'uipress-analytics-bridge'));
         }
@@ -183,17 +146,16 @@ class UIPress_Analytics_Bridge_API_Auth {
         }
         
         // Store the temporary authentication data
-        $temp_auth = array(
-            'access_token' => $token_data['access_token'],
-            'refresh_token' => $token_data['refresh_token'] ?? '',
-            'expires_in' => $token_data['expires_in'] ?? 3600,
-            'token_created' => time(),
+        $profile = array(
             'key' => $client_id,
             'token' => $token_data['access_token'],
+            'refresh_token' => isset($token_data['refresh_token']) ? $token_data['refresh_token'] : '',
+            'expires_in' => isset($token_data['expires_in']) ? $token_data['expires_in'] : 3600,
+            'token_created' => time(),
         );
         
         // Create profile with temporary data
-        $auth->set_analytics_profile($temp_auth, $is_network);
+        $auth->set_analytics_profile($profile, $is_network);
         
         // Redirect to property selection page
         $redirect_url = admin_url('options-general.php?page=uipress-analytics-bridge&select_property=1');
@@ -213,6 +175,9 @@ class UIPress_Analytics_Bridge_API_Auth {
      * @return void
      */
     public function get_auth_url() {
+        // Add this line at the beginning of the function
+        uipress_analytics_bridge_debug('AJAX handler get_auth_url called');
+        
         // Verify nonce
         check_ajax_referer('uipress-analytics-bridge-nonce', 'nonce');
         
@@ -225,10 +190,56 @@ class UIPress_Analytics_Bridge_API_Auth {
         
         // Get data
         $is_network = isset($_POST['network']) && $_POST['network'] === 'network';
-        $auth_type = isset($_POST['auth_type']) ? sanitize_text_field($_POST['auth_type']) : 'auth';
         
-        // Generate URL
-        $url = $this->build_auth_url($auth_type, $is_network);
+        // Get settings
+        $settings = $is_network 
+            ? get_site_option('uipress_analytics_bridge_settings', array()) 
+            : get_option('uipress_analytics_bridge_settings', array());
+        
+        $client_id = isset($settings['google_client_id']) ? $settings['google_client_id'] : '';
+        $client_secret = isset($settings['google_client_secret']) ? $settings['google_client_secret'] : '';
+        
+        // Add this debug line
+        uipress_analytics_bridge_debug('Client credentials', ['id_exists' => !empty($client_id), 'secret_exists' => !empty($client_secret)]);
+        
+        if (empty($client_id) || empty($client_secret)) {
+            wp_send_json_error(array(
+                'message' => __('Please enter both Google API Client ID and Client Secret.', 'uipress-analytics-bridge')
+            ));
+            return;
+        }
+        
+        // Generate transit token
+        $auth = new UIPress_Analytics_Bridge_Auth();
+        $tt = $auth->generate_tt($is_network);
+        
+        // Build callback URL
+        $callback_url = admin_url('admin.php?uipress-analytics-bridge-auth=callback');
+        if ($is_network) {
+            $callback_url = network_admin_url('admin.php?uipress-analytics-bridge-auth=callback');
+        }
+        
+        // Add network parameter if needed
+        if ($is_network) {
+            $callback_url = add_query_arg('network', 'network', $callback_url);
+        }
+        
+        // Build Google OAuth URL
+        $args = array(
+            'client_id' => $client_id,
+            'redirect_uri' => $callback_url,
+            'response_type' => 'code',
+            'scope' => $this->required_scopes,
+            'access_type' => 'offline',
+            'prompt' => 'consent',
+            'state' => $tt,
+        );
+        
+        // Build final URL
+        $url = add_query_arg($args, $this->google_auth_url);
+        
+        // Add this debug line before the json response
+        uipress_analytics_bridge_debug('Generated auth URL', $url);
         
         wp_send_json_success(array(
             'redirect' => $url,
@@ -284,61 +295,6 @@ class UIPress_Analytics_Bridge_API_Auth {
     }
 
     /**
-     * Build authentication URL
-     *
-     * @since 1.0.0
-     * @access public
-     * @param string $auth_type Type of authentication (auth, reauth, verify)
-     * @param bool $is_network Whether this is a network request
-     * @return string Authentication URL
-     */
-    public function build_auth_url($auth_type = 'auth', $is_network = false) {
-        // Get auth
-        $auth = new UIPress_Analytics_Bridge_Auth();
-        
-        // Generate transit token
-        $tt = $auth->generate_tt($is_network);
-        
-        // Get client credentials
-        $settings = $is_network 
-            ? get_site_option('uipress_analytics_bridge_settings', array()) 
-            : get_option('uipress_analytics_bridge_settings', array());
-        
-        $client_id = isset($settings['google_client_id']) ? $settings['google_client_id'] : '';
-        
-        if (empty($client_id)) {
-            return '';
-        }
-        
-        // Build callback URL
-        $callback_url = admin_url('admin.php?uipress-analytics-bridge-auth=callback');
-        if ($is_network) {
-            $callback_url = network_admin_url('admin.php?uipress-analytics-bridge-auth=callback');
-        }
-        
-        // Add network parameter to callback URL if needed
-        if ($is_network) {
-            $callback_url = add_query_arg(array('network' => 'network'), $callback_url);
-        }
-        
-        // Build Google OAuth URL
-        $args = array(
-            'client_id' => $client_id,
-            'redirect_uri' => $callback_url,
-            'response_type' => 'code',
-            'scope' => $this->required_scopes,
-            'access_type' => 'offline',
-            'prompt' => 'consent',
-            'state' => $tt,
-        );
-        
-        // Build final URL
-        $url = add_query_arg($args, $this->google_auth_url);
-        
-        return $url;
-    }
-
-    /**
      * Verify credentials
      *
      * @since 1.0.0
@@ -380,88 +336,5 @@ class UIPress_Analytics_Bridge_API_Auth {
         }
         
         return true;
-    }
-
-    /**
-     * Refresh access token
-     *
-     * @since 1.0.0
-     * @access public
-     * @param string $refresh_token Refresh token
-     * @param bool $is_network Whether this is a network request
-     * @return array|WP_Error Token data or error
-     */
-    public function refresh_access_token($refresh_token, $is_network = false) {
-        // Get credentials
-        $settings = $is_network 
-            ? get_site_option('uipress_analytics_bridge_settings', array()) 
-            : get_option('uipress_analytics_bridge_settings', array());
-        
-        $client_id = isset($settings['google_client_id']) ? $settings['google_client_id'] : '';
-        $client_secret = isset($settings['google_client_secret']) ? $settings['google_client_secret'] : '';
-        
-        if (empty($client_id) || empty($client_secret)) {
-            return new WP_Error('missing_credentials', __('API credentials are missing.', 'uipress-analytics-bridge'));
-        }
-        
-        // Request new access token
-        $response = wp_remote_post($this->google_token_url, array(
-            'body' => array(
-                'client_id' => $client_id,
-                'client_secret' => $client_secret,
-                'refresh_token' => $refresh_token,
-                'grant_type' => 'refresh_token',
-            ),
-        ));
-        
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        
-        $token_data = json_decode(wp_remote_retrieve_body($response), true);
-        
-        if (empty($token_data) || !isset($token_data['access_token'])) {
-            return new WP_Error('invalid_response', __('Invalid response when refreshing token.', 'uipress-analytics-bridge'));
-        }
-        
-        // Update the profile with the new token
-        $auth = new UIPress_Analytics_Bridge_Auth();
-        $profile = $auth->get_analytics_profile(true, $is_network);
-        
-        if (!empty($profile)) {
-            $profile['token'] = $token_data['access_token'];
-            $profile['token_created'] = time();
-            $profile['expires_in'] = $token_data['expires_in'] ?? 3600;
-            
-            $auth->set_analytics_profile($profile, $is_network);
-        }
-        
-        return $token_data;
-    }
-
-    /**
-     * Check if access token needs refreshing
-     *
-     * @since 1.0.0
-     * @access public
-     * @param array $profile Analytics profile
-     * @param bool $is_network Whether this is a network profile
-     * @return bool|array False if no refresh needed, or new token data
-     */
-    public function maybe_refresh_token($profile, $is_network = false) {
-        if (empty($profile) || empty($profile['token']) || empty($profile['refresh_token'])) {
-            return false;
-        }
-        
-        // Check if token is expired or about to expire (within 5 minutes)
-        $token_created = isset($profile['token_created']) ? $profile['token_created'] : 0;
-        $expires_in = isset($profile['expires_in']) ? $profile['expires_in'] : 3600;
-        
-        if (time() > ($token_created + $expires_in - 300)) {
-            // Token is expired or about to expire, refresh it
-            return $this->refresh_access_token($profile['refresh_token'], $is_network);
-        }
-        
-        return false;
     }
 }

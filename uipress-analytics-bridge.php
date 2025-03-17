@@ -35,6 +35,19 @@ define('UIPRESS_ANALYTICS_BRIDGE_URL', plugin_dir_url(__FILE__));
 define('UIPRESS_ANALYTICS_BRIDGE_BASENAME', plugin_basename(__FILE__));
 
 /**
+ * Add debugging helper function to plugin
+ */
+function uipress_analytics_bridge_debug($message, $data = null) {
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        error_log('UIPress Analytics Bridge: ' . $message);
+        
+        if ($data !== null) {
+            error_log(print_r($data, true));
+        }
+    }
+}
+
+/**
  * Main UIPress Analytics Bridge Class
  *
  * The main class that initiates and runs the plugin.
